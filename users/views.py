@@ -45,7 +45,7 @@ def home(request):
     if request.method == 'POST':
         # Procesar el mensaje del chatbot
         genai.configure(api_key=GENERATIVE_AI_KEY)
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-2.5-flash")
 
         user_message = request.POST.get('user_message')
 
