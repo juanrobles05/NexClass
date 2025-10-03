@@ -45,11 +45,11 @@ Un análisis con Lighthouse arrojó un puntaje de 68/100 en rendimiento, lo cual
 
 Resultados clave:
 
-First Contentful Paint (FCP): 1.1s
-Largest Contentful Paint (LCP): 1.1s
-Speed Index: 1.2s
-Cumulative Layout Shift (CLS): 0
-Total Blocking Time (TBT): 860ms (alto, afecta interactividad).
+* First Contentful Paint (FCP): 1.1s
+* Largest Contentful Paint (LCP): 1.1s
+* Speed Index: 1.2s
+* Cumulative Layout Shift (CLS): 0
+* Total Blocking Time (TBT): 860ms (alto, afecta interactividad).
 
 Aunque los tiempos iniciales de carga son buenos, el bloqueo del hilo principal reduce la fluidez. Se recomienda:
 
