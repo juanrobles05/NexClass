@@ -5,9 +5,6 @@ from .forms import QuizForm, QuestionForm, QuizFormClass, AnswerFormSet
 from classCreation_Schedules.models import Class
 from users.models import Student, Teacher
 
-# Importar servicios para inyección de dependencias
-from .services.service_factory import ServiceFactory
-
 
 # Vista para crear un quiz
 def create_quiz(request, class_id=None):
@@ -53,27 +50,29 @@ def quiz_list(request, class_id=None):
 
 
 def add_question(request, quiz_id):
-    # Inyección de dependencias
-    quiz_repository = ServiceFactory.get_quiz_repository()
-    
-    quiz = quiz_repository.get_quiz_by_id(quiz_id)
+    quiz = get_object_or_404(Quiz, id=quiz_id)
 
     if request.method == 'POST':
         # Obtener los datos del formulario
-        question_text = request.POST.get('question_text')
+        question_text = request.POST.get('question_text')  # Recupera el texto de la pregunta
+        question_form = QuestionForm(request.POST)  # El formulario de preguntas es innecesario aquí
+
         total_answers = int(request.POST.get('total_answers', 0))
 
         if question_text:  # Asegúrate de que el texto de la pregunta no esté vacío
-            question = quiz_repository.create_question(quiz_id, question_text)
+            question = Question.objects.create(text=question_text, quiz=quiz)  # Crea la pregunta
 
             # Guardar las respuestas
             for i in range(total_answers):
                 answer_text = request.POST.get(f'answer_text_{i}')
                 is_correct = request.POST.get(f'is_correct_{i}', 'off') == 'on'
                 if answer_text:
-                    quiz_repository.create_answer(question.id, answer_text, is_correct)
+                    Answer.objects.create(question=question, text=answer_text, is_correct=is_correct)
 
             return redirect('add_question', quiz_id=quiz.id)
+
+    else:
+        question_form = QuestionForm()  # Este formulario no es necesario en este caso
 
     return render(request, 'add_question.html', {
         'quiz': quiz,
@@ -81,65 +80,53 @@ def add_question(request, quiz_id):
 
 
 def quiz_detail(request, quiz_id):
-    # Inyección de dependencias
-    quiz_repository = ServiceFactory.get_quiz_repository()
-    
-    quiz = quiz_repository.get_quiz_by_id(quiz_id)
+    quiz = get_object_or_404(Quiz, id=quiz_id)
     return render(request, 'quiz_detail.html', {'quiz': quiz})
 
 
 def take_quiz(request, quiz_id):
-    # Inyección de dependencias
-    quiz_repository = ServiceFactory.get_quiz_repository()
-    quiz_evaluation_service = ServiceFactory.get_quiz_evaluation_service()
-    quiz_result_service = ServiceFactory.get_quiz_result_service()
-    session_manager = ServiceFactory.get_session_manager()
-    user_service = ServiceFactory.get_user_service()
-    
-    quiz = quiz_repository.get_quiz_by_id(quiz_id)
-    questions = quiz_repository.get_questions_by_quiz(quiz_id)
-    total_questions = len(questions)
-    student = user_service.get_student_by_user(request.user)
+    quiz = get_object_or_404(Quiz, id=quiz_id)
+    questions = Question.objects.filter(quiz=quiz)
+    total_questions = questions.count()
+    student = Student.objects.get(user=request.user)
 
     current_question_index = int(request.GET.get('question_index', 0))
 
-    # Inicializar sesión de quiz
-    session_manager.initialize_quiz_session(request)
+    if 'correct_answers' not in request.session:
+        request.session['correct_answers'] = 0
 
     if current_question_index >= total_questions:
         # Guardar el resultado en la base de datos
-        correct_answers = session_manager.get_correct_answers(request)
-        score = quiz_evaluation_service.calculate_score(correct_answers, total_questions)
+        correct_answers = request.session['correct_answers']
+        score = int((correct_answers / total_questions) * 100)
 
-        quiz_result_service.save_quiz_result(
-            student_id=student.id,
-            quiz_id=quiz.id,
+        QuizResult.objects.create(
+            student=student,  # Asumiendo que el usuario está autenticado
+            quiz=quiz,
             score=score,
             total_questions=total_questions,
             correct_answers=correct_answers
         )
 
-        session_manager.clear_quiz_session(request)
+        del request.session['correct_answers']
 
         return redirect('quiz_result', quiz_id=quiz.id)
 
     current_question = questions[current_question_index]
-    answers = quiz_repository.get_answers_by_question(current_question.id)
+    answers = current_question.answers.all()
 
     if request.method == 'POST':
         selected_answer_id = request.POST.get('answer')
-        
-        # Verificar si la respuesta es correcta usando el servicio de evaluación
-        if quiz_evaluation_service.evaluate_answer(int(selected_answer_id)):
-            session_manager.update_correct_answers(request)
+        selected_answer = Answer.objects.get(id=selected_answer_id)
+
+        # Verificar si la respuesta es correcta y actualizar el conteo
+        if selected_answer.is_correct:
+            request.session['correct_answers'] += 1
 
         # Redirigir a la siguiente pregunta
         return redirect(f'{request.path}?question_index={current_question_index + 1}')
 
-    progress = quiz_evaluation_service.get_quiz_progress(
-        current_question_index + 1, 
-        total_questions
-    )
+    progress = int((current_question_index + 1) / total_questions * 100)  # Progreso en %
 
     return render(request, 'take_quiz.html', {
         'quiz': quiz,
@@ -152,15 +139,9 @@ def take_quiz(request, quiz_id):
 
 
 def quiz_result(request, quiz_id):
-    # Inyección de dependencias
-    quiz_repository = ServiceFactory.get_quiz_repository()
-    quiz_result_service = ServiceFactory.get_quiz_result_service()
-    user_service = ServiceFactory.get_user_service()
-    
-    student = user_service.get_student_by_user(request.user)
-    quiz = quiz_repository.get_quiz_by_id(quiz_id)
-    result = quiz_result_service.get_student_quiz_result(student.id, quiz_id)
-    
+    student = Student.objects.get(user=request.user)
+    quiz = get_object_or_404(Quiz, id=quiz_id)
+    result = QuizResult.objects.filter(student=student, quiz=quiz).last()
     return render(request, 'quiz_result.html', {'quiz': quiz, 'result': result})
 
 
@@ -175,12 +156,8 @@ def quiz_list_student(request, class_id):
 
 
 def completed_quizzes(request):
-    # Inyección de dependencias
-    quiz_result_service = ServiceFactory.get_quiz_result_service()
-    user_service = ServiceFactory.get_user_service()
-    
-    student = user_service.get_student_by_user(request.user)
-    student_quizzes = quiz_result_service.get_student_completed_quizzes(student.id)
+    student = Student.objects.get(user=request.user)
+    student_quizzes = QuizResult.objects.filter(student=student)
 
     return render(request, 'completed_quizzes.html', {
         'student_quizzes_': student_quizzes,
