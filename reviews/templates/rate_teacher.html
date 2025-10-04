@@ -4,19 +4,29 @@
     <title>Rate Profesor</title>
 </head>
 <div class="container">
-    <h2 class="my-4">Rate {{ teacher.user.username }}</h2>
-    <form method="post">
-        {% csrf_token %}
-        <div class="mb-3">
-            {{ form.rating.label_tag }}
-            {{ form.rating }}
+    <h2 class="my-4">⭐ Rate {{ teacher.user.username }}</h2>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+                <div class="mb-3">
+                    {{ form.rating.label_tag }}
+                    {{ form.rating }}
+                    <div class="form-text">Selecciona una calificación del 1 al 5</div>
+                </div>
+                <div class="mb-3">
+                    {{ form.comment.label_tag }}
+                    {{ form.comment }}
+                    <div class="form-text">Comparte tu experiencia con este profesor (opcional)</div>
+                </div>
+                <button type="submit" class="button-custom-two">
+                    Submit Rating
+                </button>
+                <a href="{% url 'teachers_detail' teacher.id %}" class="btn btn-secondary ms-2">Cancelar</a>
+            </form>
         </div>
-        <div class="mb-3">
-            {{ form.comment.label_tag }}
-            {{ form.comment }}
-        </div>
-        <button type="submit" class="button-custom-two">Submit Rating</button>
-    </form>
+    </div>
 </div>
 
 {% endblock content %}
